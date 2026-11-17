@@ -1,5 +1,4 @@
-
-name: Build Phonics APK V4.2
+name: Build Phonics APK V4.3 AI Explanations
 
 on:
   workflow_dispatch:
@@ -7,17 +6,32 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract V4.2 project
-        run: unzip -oq PhonicsAdventureV42_native_source.zip
+      - name: Unpack V4.3 project
+        run: unzip -oq PhonicsAdventureV43_hybrid_voice_source.zip
+
+      - name: Collect licensed human word recordings
+        run: python3 Phonics_Adventure_App_V43/source/fetch_commons_words.py
+
+      - name: Add optional recordings
+        run: |
+          if [ -f human_recordings.zip ]; then
+            unzip -j -o human_recordings.zip -d Phonics_Adventure_App_V43/source/voice_pack
+          fi
 
       - name: Rebuild game
-        run: python3 Phonics_Adventure_App_V42/source/build.py
+        run: python3 Phonics_Adventure_App_V43/source/build.py
+
+      - name: Check game
+        run: |
+          python3 Phonics_Adventure_App_V43/source/audit_v4.py
+          node --check Phonics_Adventure_App_V43/source/app.js
 
       - uses: actions/setup-java@v4
         with:
@@ -26,7 +40,7 @@ jobs:
 
       - uses: android-actions/setup-android@v4
 
-      - name: Install Android SDK
+      - name: Install SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
       - uses: gradle/actions/setup-gradle@v6
@@ -34,12 +48,12 @@ jobs:
           gradle-version: '8.11.1'
 
       - name: Build APK
-        working-directory: Phonics_Adventure_App_V42/android-app
+        working-directory: Phonics_Adventure_App_V43/android-app
         run: gradle :app:assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: PhonicsAdventure-v42-debug
-          path: Phonics_Adventure_App_V42/android-app/app/build/outputs/apk/debug/app-debug.apk
+          name: PhonicsAdventure-v43-ai-voice-debug
+          path: Phonics_Adventure_App_V43/android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
