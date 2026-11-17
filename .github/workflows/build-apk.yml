@@ -1,7 +1,14 @@
-name: Build Phonics APK V4.3 AI Explanations
+
+name: Build Phonics APK V4.4
 
 on:
   workflow_dispatch:
+    inputs:
+      collect_new_word_audio:
+        description: '尝试批量收集获得许可的美式真人单词录音（较耗时）'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -13,25 +20,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unpack V4.3 project
-        run: unzip -oq PhonicsAdventureV43_hybrid_voice_source.zip
+      - name: Unpack V4.4 source
+        run: unzip -oq PhonicsAdventureV44_more_words_mom_audio_source.zip
 
-      - name: Collect licensed human word recordings
-        run: python3 Phonics_Adventure_App_V43/source/fetch_commons_words.py
+      - name: Collect optional licensed human US word recordings
+        if: ${{ inputs.collect_new_word_audio }}
+        continue-on-error: true
+        timeout-minutes: 25
+        run: python3 Phonics_Adventure_App_V44/source/fetch_commons_words.py
 
-      - name: Add optional recordings
+      - name: Add optional parent-provided recordings
         run: |
           if [ -f human_recordings.zip ]; then
-            unzip -j -o human_recordings.zip -d Phonics_Adventure_App_V43/source/voice_pack
+            mkdir -p Phonics_Adventure_App_V44/source/voice_pack
+            unzip -j -o human_recordings.zip -d Phonics_Adventure_App_V44/source/voice_pack
           fi
 
-      - name: Rebuild game
-        run: python3 Phonics_Adventure_App_V43/source/build.py
+      - name: Build offline app assets
+        run: python3 Phonics_Adventure_App_V44/source/build.py
 
-      - name: Check game
+      - name: Audit wordbank and scripts
         run: |
-          python3 Phonics_Adventure_App_V43/source/audit_v4.py
-          node --check Phonics_Adventure_App_V43/source/app.js
+          python3 Phonics_Adventure_App_V44/source/audit_v4.py
+          python3 Phonics_Adventure_App_V44/source/audit.py
+          node --check Phonics_Adventure_App_V44/source/app.js
 
       - uses: actions/setup-java@v4
         with:
@@ -40,20 +52,30 @@ jobs:
 
       - uses: android-actions/setup-android@v4
 
-      - name: Install SDK
+      - name: Install Android SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.11.1'
 
-      - name: Build APK
-        working-directory: Phonics_Adventure_App_V43/android-app
+      - name: Build debug APK
+        working-directory: Phonics_Adventure_App_V44/android-app
         run: gradle :app:assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: PhonicsAdventure-v43-ai-voice-debug
-          path: Phonics_Adventure_App_V43/android-app/app/build/outputs/apk/debug/app-debug.apk
+          name: PhonicsAdventure-v44-debug
+          path: Phonics_Adventure_App_V44/android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload recording coverage reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phonics-v44-audio-coverage
+          path: |
+            Phonics_Adventure_App_V44/source/word_audio_coverage.csv
+            Phonics_Adventure_App_V44/source/word_audio_attribution.csv
+          if-no-files-found: ignore
